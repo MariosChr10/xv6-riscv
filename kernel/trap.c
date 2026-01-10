@@ -77,12 +77,21 @@ usertrap(void)
     setkilled(p);
   }
 
-  if(killed(p))
+   // Αν η διεργασία έχει σημαδευτεί για kill, τερματίζουμε.
+  // Στο δικό σου xv6 χρησιμοποιείς kexit, άρα μένουμε συνεπείς.
+  if(killed(p)){
     kexit(-1);
+  }
+  // Timer tick: κάνουμε preempt ΜΟΝΟ αν
+  // (α) τελείωσε το quantum ή (β) υπάρχει RUNNABLE διεργασία υψηλότερης προτεραιότητας.
+  if(which_dev == 2){
+    if(p->state == RUNNING &&
+       (p->qticks >= mlfq_quantum(p->qlevel) || mlfq_exists_higher(p->qlevel))){
+      yield();
+    }
+  }
 
-  // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
-    yield();
+
 
   prepare_return();
 
@@ -151,9 +160,14 @@ kerneltrap()
     panic("kerneltrap");
   }
 
-  // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2 && myproc() != 0)
-    yield();
+  if(which_dev == 2){
+    struct proc *p = myproc();
+    if(p && p->state == RUNNING){
+      if(p->qticks >= mlfq_quantum(p->qlevel) || mlfq_exists_higher(p->qlevel)){
+        yield();
+      }
+    }
+  }
 
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.
@@ -164,11 +178,29 @@ kerneltrap()
 void
 clockintr()
 {
+  uint now = 0;
+
+  // Μόνο η CPU0 ενημερώνει το global ticks και τρέχει aging,
+  // για να μην το κάνουν όλοι ταυτόχρονα.
   if(cpuid() == 0){
     acquire(&tickslock);
     ticks++;
+    now = ticks;
     wakeup(&ticks);
     release(&tickslock);
+
+    // Aging: αν μια RUNNABLE περιμένει πολύ, ανεβαίνει προτεραιότητα.
+    mlfq_aging(now);
+  }
+
+  // Σε κάθε tick χρεώνουμε 1 tick CPU στη RUNNING διεργασία (σε ΟΛΕΣ τις CPUs).
+  struct proc *p = myproc();
+  if(p){
+    acquire(&p->lock);
+    if(p->state == RUNNING){
+      p->qticks++;
+    }
+    release(&p->lock);
   }
 
   // ask for the next timer interrupt. this also clears
@@ -177,6 +209,7 @@ clockintr()
   w_stimecmp(r_time() + 1000000);
 }
 
+  
 // check if it's an external interrupt or software interrupt,
 // and handle it.
 // returns 2 if timer interrupt,

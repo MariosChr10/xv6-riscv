@@ -37,7 +37,8 @@ main(void)
     if(st.inuse[i] == 0)
       continue;
 
-    printf("%d %d %-6s %d  %d  %d %s\n",
+        // Το xv6 printf ΔΕΝ υποστηρίζει πλάτη/στοίχιση τύπου "%-6s", άρα κρατάμε απλά "%s".
+    printf("%d %d %s %d %d %d %s\n",
            st.pid[i],
            st.ppid[i],
            stname(st.state[i]),
