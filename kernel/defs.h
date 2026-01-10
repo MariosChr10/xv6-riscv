@@ -4,6 +4,8 @@ struct file;
 struct inode;
 struct pipe;
 struct proc;
+struct pstat;
+void fillpstat(struct pstat *st);
 struct spinlock;
 struct sleeplock;
 struct stat;

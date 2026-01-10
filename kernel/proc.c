@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "kernel/pstat.h"  
+
+
 
 struct cpu cpus[NCPU];
 
@@ -123,6 +126,11 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  // Νέα διεργασία ξεκινάει στο υψηλότερο επίπεδο (0) 
+  p->qlevel = 0;
+  p->qticks = 0;
+  p->runnable_since = ticks;
+
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -227,6 +235,9 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  // Μετά από wakeup, καταγράφουμε πότε έγινε RUNNABLE (για aging).
+  // Δεν μηδενίζουμε το qticks εδώ.
+  p->runnable_since = ticks;
 
   release(&p->lock);
 }
@@ -496,6 +507,9 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  // Όταν ξαναμπαίνει σε RUNNABLE, κρατάμε πότε έγινε runnable (για aging).
+  p->runnable_since = ticks;
+
   sched();
   release(&p->lock);
 }
@@ -688,3 +702,36 @@ procdump(void)
     printf("\n");
   }
 }
+// Γεμίζει ένα snapshot με πληροφορίες για όλες τις διεργασίες.
+// Κρατάμε wait_lock για να διαβάσουμε με ασφάλεια p->parent.
+void
+fillpstat(struct pstat *st)
+{
+  acquire(&wait_lock);
+  for(int i = 0; i < NPROC; i++){
+    struct proc *p = &proc[i];
+
+    acquire(&p->lock);
+
+    int active = (p->state != UNUSED);
+
+    st->inuse[i] = active;
+    st->pid[i] = p->pid;
+    st->ppid[i] = (p->parent != 0) ? p->parent->pid : 0;
+
+    st->state[i] = p->state;
+    st->qlevel[i] = p->qlevel;
+    st->qticks[i] = p->qticks;
+    st->sz[i] = p->sz;
+
+    // Αντιγραφή ονόματος διεργασίας (σταθερό μήκος).
+    for(int k = 0; k < PSTAT_NAME_LEN; k++){
+      st->name[i][k] = p->name[k];
+    }
+
+    release(&p->lock);
+  }
+  release(&wait_lock);
+}
+
+

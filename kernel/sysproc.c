@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "kernel/pstat.h"  
 #include "vm.h"
 
 uint64
@@ -107,3 +108,27 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// getpinfo(struct pstat *)
+// Αντιγράφει snapshot πληροφοριών διεργασιών στο user space.
+// Επιστρέφει 0 σε επιτυχία, -1 σε αποτυχία.
+uint64
+sys_getpinfo(void)
+{
+  uint64 uaddr;
+
+  // Παίρνουμε τη διεύθυνση του user buffer (argaddr είναι void στο xv6).
+  argaddr(0, &uaddr);
+
+  struct pstat st;
+
+  // Γεμίζουμε το snapshot στο kernel.
+  fillpstat(&st);
+
+  // Αντιγράφουμε το snapshot στο user space.
+  if(copyout(myproc()->pagetable, uaddr, (char*)&st, sizeof(st)) < 0)
+    return -1;
+
+  return 0;
+}
+
