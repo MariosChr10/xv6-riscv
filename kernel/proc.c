@@ -171,7 +171,6 @@ found:
   p->qlevel = 0;
   p->qticks = 0;
   p->runnable_since = ticks;
-
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -278,10 +277,6 @@ userinit(void)
   p->state = RUNNABLE;
   p->runnable_since = ticks;
 
-  // Μετά από wakeup, καταγράφουμε πότε έγινε RUNNABLE (για aging).
-  // Δεν μηδενίζουμε το qticks εδώ.
-  p->runnable_since = ticks;
-
   release(&p->lock);
 }
 
@@ -354,7 +349,7 @@ kfork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  p->runnable_since = ticks;
+  np->runnable_since = ticks;
   release(&np->lock);
 
   return pid;
@@ -492,9 +487,7 @@ scheduler(void)
   struct cpu *c = mycpu();
   c->proc = 0;
 
-  // Δείκτες Round-Robin (RR) ανά ουρά προτεραιότητας (qlevel)
-  // last[q] κρατάει το τελευταίο index στο proc[] που εκτελέστηκε για την ουρά q
-  static int last[4] = {0, 0, 0, 0};
+  static int last[NCPU][4];   // per-CPU round-robin δείκτες: last[cpuid][qlevel]
 
   for(;;){
     // Επιτρέπουμε interrupts όσο ψάχνουμε διεργασία (όπως στο xv6)
@@ -518,7 +511,8 @@ scheduler(void)
       continue;
 
     // 2) Round-Robin επιλογή ΜΕΣΑ στην ουρά best
-    int start = last[best];
+    int id = cpuid();
+    int start = last[id][best];
     int picked = -1;
     struct proc *p = 0;
 
@@ -547,7 +541,7 @@ scheduler(void)
     c->proc = 0;
 
     // 4) Ενημερώνουμε τον δείκτη RR της ουράς best
-    last[best] = picked;
+    last[id][best] = picked;
 
     // 5) Απελευθερώνουμε το lock μετά την επιστροφή από το swtch
     release(&p->lock);
