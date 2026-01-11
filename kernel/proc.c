@@ -488,43 +488,72 @@ kwait(uint64 addr)
 void
 scheduler(void)
 {
-  struct proc *p;
+  // Ο τρέχων CPU (hart) και η διεργασία που “τρέχει” πάνω του
   struct cpu *c = mycpu();
-
   c->proc = 0;
+
+  // Δείκτες Round-Robin (RR) ανά ουρά προτεραιότητας (qlevel)
+  // last[q] κρατάει το τελευταίο index στο proc[] που εκτελέστηκε για την ουρά q
+  static int last[4] = {0, 0, 0, 0};
+
   for(;;){
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting. Then turn them back off
-    // to avoid a possible race between an interrupt
-    // and wfi.
+    // Επιτρέπουμε interrupts όσο ψάχνουμε διεργασία (όπως στο xv6)
     intr_on();
-    intr_off();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
+    // best = η καλύτερη (υψηλότερη) προτεραιότητα που υπάρχει RUNNABLE
+    // Μικρότερο qlevel => υψηλότερη προτεραιότητα
+    int best = 4;
+
+    // 1) Βρίσκουμε την υψηλότερη προτεραιότητα (μικρότερο qlevel) που έχει έστω 1 RUNNABLE
+    for(int i = 0; i < NPROC; i++){
+      struct proc *p = &proc[i];
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+      if(p->state == RUNNABLE && p->qlevel < best)
+        best = p->qlevel;
+      release(&p->lock);
+    }
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+    // Αν δεν βρέθηκε τίποτα runnable, ξαναπροσπαθούμε
+    if(best == 4)
+      continue;
+
+    // 2) Round-Robin επιλογή ΜΕΣΑ στην ουρά best
+    int start = last[best];
+    int picked = -1;
+    struct proc *p = 0;
+
+    // Ξεκινάμε από το “επόμενο” μετά το last[best] ώστε να έχουμε RR δίκαιη επιλογή
+    for(int off = 1; off <= NPROC; off++){
+      int i = (start + off) % NPROC;
+      p = &proc[i];
+      acquire(&p->lock);
+      if(p->state == RUNNABLE && p->qlevel == best){
+        // Βρήκαμε τον επόμενο RUNNABLE στην ίδια ουρά best
+        picked = i;
+        break; // κρατάμε το p->lock για να κάνουμε context switch με ασφάλεια
       }
       release(&p->lock);
     }
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
-      asm volatile("wfi");
-    }
+
+    // Αν για κάποιο λόγο δεν βρέθηκε (race), ξαναπροσπαθούμε
+    if(picked < 0)
+      continue;
+
+    // 3) Εκτέλεση της επιλεγμένης διεργασίας
+    // Ορίζουμε state RUNNING και κάνουμε swtch στο context της διεργασίας
+    p->state = RUNNING;
+    c->proc = p;
+    swtch(&c->context, &p->context);
+    c->proc = 0;
+
+    // 4) Ενημερώνουμε τον δείκτη RR της ουράς best
+    last[best] = picked;
+
+    // 5) Απελευθερώνουμε το lock μετά την επιστροφή από το swtch
+    release(&p->lock);
   }
 }
+
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
