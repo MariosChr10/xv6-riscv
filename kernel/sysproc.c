@@ -109,15 +109,13 @@ sys_uptime(void)
   return xticks;
 }
 
-// getpinfo(struct pstat *)
 // Αντιγράφει snapshot πληροφοριών διεργασιών στο user space.
-// Επιστρέφει 0 σε επιτυχία, -1 σε αποτυχία.
 uint64
 sys_getpinfo(void)
 {
   uint64 uaddr;
 
-  // Παίρνουμε τη διεύθυνση του user buffer (argaddr είναι void στο xv6).
+  // Παίρνουμε τη διεύθυνση του user buffer.
   argaddr(0, &uaddr);
 
   struct pstat st;

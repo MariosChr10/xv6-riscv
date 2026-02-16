@@ -15,7 +15,7 @@ struct proc proc[NPROC];
 int
 mlfq_quantum(int level)
 {
-  // Χρονομερίδια ανά επίπεδο: 0->4, 1->8, 2->16, 3->32 (timer ticks).
+  // Χρονομερίδια ανά επίπεδο: 0->4, 1->8, 2->16, 3->32 .
   static int q[4] = {4, 8, 16, 32};
   if(level < 0) level = 0;
   if(level > 3) level = 3;
@@ -25,7 +25,7 @@ mlfq_quantum(int level)
 int
 mlfq_exists_higher(int level)
 {
-  // Επιστρέφει 1 αν υπάρχει RUNNABLE διεργασία με υψηλότερη προτεραιότητα (μικρότερο qlevel).
+  // Επιστρέφει 1 αν υπάρχει RUNNABLE διεργασία με υψηλότερη προτεραιότητα.
   for(struct proc *p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     int ok = (p->state == RUNNABLE && p->qlevel < level);
@@ -39,7 +39,7 @@ mlfq_exists_higher(int level)
 void
 mlfq_aging(uint now)
 {
-  // Aging: αν μια RUNNABLE περιμένει >= 10 * quantum(τρέχον επίπεδο), ανεβαίνει ένα επίπεδο (μέχρι 0).
+  // Αν μια RUNNABLE περιμένει >= 10 * quantum(τρέχον επίπεδο), ανεβαίνει ένα επίπεδο.
   for(struct proc *p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->state == RUNNABLE && p->qlevel > 0){
@@ -404,8 +404,8 @@ kexit(int status)
   wakeup(p->parent);
   
   acquire(&p->lock);
-  // Αν καταναλώθηκε όλο το χρονομερίδιο, τότε (για 0/1/2) υποβιβάζουμε επίπεδο.
-  // Αν παραδώσει νωρίτερα, ΔΕΝ μηδενίζουμε qticks (κρατάει το υπόλοιπο).
+  // Αν καταναλώθηκε όλο το χρονομερίδιο, τότε για 0/1/2 υποβιβάζουμε επίπεδο.
+  // Αν παραδώσει νωρίτερα, δεν μηδενίζουμε qticks.
   int q = mlfq_quantum(p->qlevel);
   if(p->qticks >= q){
     if(p->qlevel < 3)
@@ -483,21 +483,20 @@ kwait(uint64 addr)
 void
 scheduler(void)
 {
-  // Ο τρέχων CPU (hart) και η διεργασία που “τρέχει” πάνω του
+  // Ο τρέχων CPU και η διεργασία που τρέχει πάνω του
   struct cpu *c = mycpu();
   c->proc = 0;
 
-  static int last[NCPU][4];   // per-CPU round-robin δείκτες: last[cpuid][qlevel]
+  static int last[NCPU][4];   // per-CPU round-robin δείκτες
 
   for(;;){
-    // Επιτρέπουμε interrupts όσο ψάχνουμε διεργασία (όπως στο xv6)
+    // Επιτρέπουμε interrupts όσο ψάχνουμε διεργασία
     intr_on();
 
-    // best = η καλύτερη (υψηλότερη) προτεραιότητα που υπάρχει RUNNABLE
-    // Μικρότερο qlevel => υψηλότερη προτεραιότητα
+    // Η καλύτερη προτεραιότητα που υπάρχει RUNNABLE
     int best = 4;
 
-    // 1) Βρίσκουμε την υψηλότερη προτεραιότητα (μικρότερο qlevel) που έχει έστω 1 RUNNABLE
+    // Βρίσκουμε την υψηλότερη προτεραιότητα που έχει έστω 1 RUNNABLE
     for(int i = 0; i < NPROC; i++){
       struct proc *p = &proc[i];
       acquire(&p->lock);
@@ -510,13 +509,12 @@ scheduler(void)
     if(best == 4)
       continue;
 
-    // 2) Round-Robin επιλογή ΜΕΣΑ στην ουρά best
+    // Round-Robin επιλογή μέσσα στην ουρά best
     int id = cpuid();
     int start = last[id][best];
     int picked = -1;
     struct proc *p = 0;
 
-    // Ξεκινάμε από το “επόμενο” μετά το last[best] ώστε να έχουμε RR δίκαιη επιλογή
     for(int off = 1; off <= NPROC; off++){
       int i = (start + off) % NPROC;
       p = &proc[i];
@@ -529,24 +527,23 @@ scheduler(void)
       release(&p->lock);
     }
 
-    // Αν για κάποιο λόγο δεν βρέθηκε (race), ξαναπροσπαθούμε
+    // Αν για κάποιο λόγο δεν βρέθηκε, ξαναπροσπαθούμε
     if(picked < 0)
       continue;
 
-    // 3) Εκτέλεση της επιλεγμένης διεργασίας
     // Ορίζουμε state RUNNING και κάνουμε swtch στο context της διεργασίας
     p->state = RUNNING;
     c->proc = p;
     swtch(&c->context, &p->context);
     c->proc = 0;
 
-    // 4) Ενημερώνουμε τον δείκτη RR της ουράς best
+    // Ενημερώνουμε τον δείκτη RR της ουράσ best
     last[id][best] = picked;
 
-    // 5) Απελευθερώνουμε το lock μετά την επιστροφή από το swtch
+    // Απελευθερώνουμε το lock μετά την επιστροφή από το swtch
     release(&p->lock);
   }
-}
+} 
 
 
 // Switch to scheduler.  Must hold only p->lock
@@ -582,8 +579,6 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
-  // Αν τελείωσε το χρονομερίδιο στο τρέχον επίπεδο, τότε (για 0/1/2) υποβιβάζουμε.
-  // Αν παραδώσει νωρίτερα, δεν μηδενίζουμε qticks (κρατάει το υπόλοιπο).
   int q = mlfq_quantum(p->qlevel);
   if(p->qticks >= q){
     if(p->qlevel < 3)
@@ -592,7 +587,7 @@ yield(void)
   }
 
   p->state = RUNNABLE;
-  // Όταν ξαναμπαίνει σε RUNNABLE, κρατάμε πότε έγινε runnable (για aging).
+  // Όταν ξαναμπαίνει σε RUNNABLE, κρατάμε πότε έγινε runnable
   p->runnable_since = ticks;
 
   sched();
@@ -789,7 +784,7 @@ procdump(void)
     printf("\n");
   }
 }
-// Γεμίζει ένα snapshot με πληροφορίες για όλες τις διεργασίες.
+
 // Κρατάμε wait_lock για να διαβάσουμε με ασφάλεια p->parent.
 void
 fillpstat(struct pstat *st)
@@ -811,7 +806,7 @@ fillpstat(struct pstat *st)
     st->qticks[i] = p->qticks;
     st->sz[i] = p->sz;
 
-    // Αντιγραφή ονόματος διεργασίας (σταθερό μήκος).
+    // Αντιγραφή ονόματος διεργασίας
     for(int k = 0; k < PSTAT_NAME_LEN; k++){
       st->name[i][k] = p->name[k];
     }

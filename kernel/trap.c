@@ -78,12 +78,11 @@ usertrap(void)
   }
 
    // Αν η διεργασία έχει σημαδευτεί για kill, τερματίζουμε.
-  // Στο δικό σου xv6 χρησιμοποιείς kexit, άρα μένουμε συνεπείς.
   if(killed(p)){
     kexit(-1);
   }
-  // Timer tick: κάνουμε preempt ΜΟΝΟ αν
-  // (α) τελείωσε το quantum ή (β) υπάρχει RUNNABLE διεργασία υψηλότερης προτεραιότητας.
+  // Κάνουμε preempt μονο αν τελείωσε το quantum ή υπάρχει RUNNABLE διεργασία υψηλότερης προτεραιότητας.
+  // 
   if(which_dev == 2){
     if(p->state == RUNNING &&
        (p->qticks >= mlfq_quantum(p->qlevel) || mlfq_exists_higher(p->qlevel))){
@@ -180,8 +179,7 @@ clockintr()
 {
   uint now = 0;
 
-  // Μόνο η CPU0 ενημερώνει το global ticks και τρέχει aging,
-  // για να μην το κάνουν όλοι ταυτόχρονα.
+  // Μόνο η CPU0 ενημερώνει το global ticks και τρέχει aging
   if(cpuid() == 0){
     acquire(&tickslock);
     ticks++;
@@ -189,11 +187,11 @@ clockintr()
     wakeup(&ticks);
     release(&tickslock);
 
-    // Aging: αν μια RUNNABLE περιμένει πολύ, ανεβαίνει προτεραιότητα.
+    // Αν μια RUNNABLE περιμένει πολύ, ανεβαίνει προτεραιότητα.
     mlfq_aging(now);
   }
 
-  // Σε κάθε tick χρεώνουμε 1 tick CPU στη RUNNING διεργασία (σε ΟΛΕΣ τις CPUs).
+  // Σε κάθε tick χρεώνουμε 1 tick CPU στη RUNNING διεργασία
   struct proc *p = myproc();
   if(p){
     acquire(&p->lock);

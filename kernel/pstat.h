@@ -1,5 +1,3 @@
-// kernel/pstat.h
-// Δομή snapshot για το getpinfo(), την διαβάζει το user πρόγραμμα ps.
 
 #ifndef _KERNEL_PSTAT_H_
 #define _KERNEL_PSTAT_H_
@@ -17,11 +15,10 @@ struct pstat {
   int pid[NPROC];
   int ppid[NPROC];
 
-  // Κατάσταση διεργασίας (τιμή enum procstate).
+  // Κατάσταση διεργασίας 
   int state[NPROC];
 
-  // Πεδία που χρειάζονται για την εκφώνηση (επίπεδο προτεραιότητας κλπ).
-  int qlevel[NPROC];   // 0..3 (0 υψηλότερο)
+  int qlevel[NPROC];   
   int qticks[NPROC];   // ticks που έχουν καταναλωθεί στο τρέχον quantum
 
   // Μέγεθος μνήμης.

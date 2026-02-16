@@ -104,7 +104,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  int qlevel;                // 0..3: επίπεδο ουράς/προτεραιότητας (0 το υψηλότερο)
+  int qlevel;                 // 0..3: επίπεδο ουράς/προτεραιότητας (0 το υψηλότερο)
   int qticks;                 // πόσα ticks έχει τρέξει στο τρέχον quantum
-  uint runnable_since;       // tick στο οποίο έγινε RUNNABLE (για aging)
+  uint runnable_since;       // tick στο οποίο έγινε RUNNABLE 
+  
 };
